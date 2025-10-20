@@ -158,6 +158,10 @@ export function useDocuments() {
 
   const shareDocument = async (document: Document) => {
     try {
+      // Check if we're in a mobile environment (APK/Capacitor)
+      const isMobile = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      const isCapacitor = !!(window as any).Capacitor;
+      
       // Try to download the file for native sharing
       const { data: blob, error: dlError } = await supabase.storage
         .from('documents')
@@ -168,21 +172,83 @@ export function useDocuments() {
       const file = new File([blob], document.name, { type: document.file_type });
       const nav: any = navigator as any;
 
-      if (nav && typeof nav.share === 'function' && typeof nav.canShare === 'function' && nav.canShare({ files: [file] })) {
-        await nav.share({ files: [file], title: document.name, text: document.description || 'Shared from Family Document Vault' });
-        toast({ title: 'Share dialog opened', description: 'Use your device to share the file.' });
-        return;
-      }
+      // For mobile APK environments, try different sharing approaches
+      if (isMobile || isCapacitor) {
+        // Try native file sharing first
+        if (nav && typeof nav.share === 'function') {
+          try {
+            // Check if we can share files
+            if (typeof nav.canShare === 'function' && nav.canShare({ files: [file] })) {
+              await nav.share({ 
+                files: [file], 
+                title: document.name, 
+                text: document.description || 'Shared from Family Document Vault' 
+              });
+              toast({ title: 'Share dialog opened', description: 'Use your device to share the file.' });
+              return;
+            }
+          } catch (fileShareError) {
+            console.log('File sharing failed, trying URL sharing:', fileShareError);
+          }
+        }
 
-      // Fallback: share with URL if files are not supported
-      if (nav && typeof nav.share === 'function') {
-        const { data: linkData, error } = await supabase.storage
-          .from('documents')
-          .createSignedUrl(document.file_path, 60 * 60 * 24);
-        if (error) throw error;
-        await nav.share({ title: document.name, text: document.description || 'Document link', url: linkData.signedUrl });
-        toast({ title: 'Share dialog opened', description: 'A shareable link was used.' });
-        return;
+        // Try URL sharing for mobile
+        if (nav && typeof nav.share === 'function') {
+          try {
+            const { data: linkData, error } = await supabase.storage
+              .from('documents')
+              .createSignedUrl(document.file_path, 60 * 60 * 24);
+            if (error) throw error;
+            
+            await nav.share({ 
+              title: document.name, 
+              text: document.description || 'Document link', 
+              url: linkData.signedUrl 
+            });
+            toast({ title: 'Share dialog opened', description: 'A shareable link was used.' });
+            return;
+          } catch (urlShareError) {
+            console.log('URL sharing failed:', urlShareError);
+          }
+        }
+
+        // For Capacitor, try the native plugin
+        if (isCapacitor && (window as any).Capacitor?.Plugins?.Share) {
+          try {
+            const { data: linkData, error } = await supabase.storage
+              .from('documents')
+              .createSignedUrl(document.file_path, 60 * 60 * 24);
+            if (error) throw error;
+            
+            await (window as any).Capacitor.Plugins.Share.share({
+              title: document.name,
+              text: document.description || 'Document link',
+              url: linkData.signedUrl,
+            });
+            toast({ title: 'Share dialog opened', description: 'Native sharing activated.' });
+            return;
+          } catch (capacitorError) {
+            console.log('Capacitor sharing failed:', capacitorError);
+          }
+        }
+      } else {
+        // Desktop/Web sharing logic
+        if (nav && typeof nav.share === 'function' && typeof nav.canShare === 'function' && nav.canShare({ files: [file] })) {
+          await nav.share({ files: [file], title: document.name, text: document.description || 'Shared from Family Document Vault' });
+          toast({ title: 'Share dialog opened', description: 'Use your device to share the file.' });
+          return;
+        }
+
+        // Fallback: share with URL if files are not supported
+        if (nav && typeof nav.share === 'function') {
+          const { data: linkData, error } = await supabase.storage
+            .from('documents')
+            .createSignedUrl(document.file_path, 60 * 60 * 24);
+          if (error) throw error;
+          await nav.share({ title: document.name, text: document.description || 'Document link', url: linkData.signedUrl });
+          toast({ title: 'Share dialog opened', description: 'A shareable link was used.' });
+          return;
+        }
       }
 
       // Final fallback: copy link to clipboard
