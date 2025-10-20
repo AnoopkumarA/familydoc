@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { useNavigate } from 'react-router-dom';
-import { Phone, User as UserIcon } from 'lucide-react';
+import { Phone, User as UserIcon, Upload, Camera } from 'lucide-react';
 
 export default function Profile() {
   const { user, signOut } = useAuth();
@@ -16,6 +16,7 @@ export default function Profile() {
   const [avatarUrl, setAvatarUrl] = useState('');
   const [loading, setLoading] = useState(true);
   const [phone, setPhone] = useState('');
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
   useEffect(() => {
     const loadProfile = async () => {
@@ -68,6 +69,48 @@ export default function Profile() {
     }
   };
 
+  const handleAvatarUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file || !user) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      toast({ variant: 'destructive', title: 'Invalid file type', description: 'Please select an image file.' });
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast({ variant: 'destructive', title: 'File too large', description: 'Please select an image smaller than 5MB.' });
+      return;
+    }
+
+    setUploadingAvatar(true);
+    try {
+      // Upload to Supabase storage
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${user.id}/avatar-${Date.now()}.${fileExt}`;
+      
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(fileName, file);
+
+      if (uploadError) throw uploadError;
+
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(fileName);
+
+      setAvatarUrl(publicUrl);
+      toast({ title: 'Avatar uploaded', description: 'Your profile photo has been updated.' });
+    } catch (error: any) {
+      toast({ variant: 'destructive', title: 'Upload failed', description: error.message });
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
+
   return (
     <div className="container mx-auto px-4 py-8">
       {/* Hero */}
@@ -96,8 +139,57 @@ export default function Profile() {
               <Input value={user?.email || ''} disabled />
             </div>
             <div className="space-y-2">
-              <label className="text-sm text-muted-foreground">Avatar URL</label>
-              <Input value={avatarUrl} onChange={(e) => setAvatarUrl(e.target.value)} placeholder="https://..." />
+              <label className="text-sm text-muted-foreground">Profile Photo</label>
+              <div className="flex items-center gap-4">
+                <div className="relative">
+                  {avatarUrl ? (
+                    <img 
+                      src={avatarUrl} 
+                      alt="Profile" 
+                      className="w-16 h-16 rounded-full object-cover border-2 border-border"
+                    />
+                  ) : (
+                    <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center border-2 border-border">
+                      <UserIcon className="h-8 w-8 text-muted-foreground" />
+                    </div>
+                  )}
+                </div>
+                <div className="flex-1">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleAvatarUpload}
+                    className="hidden"
+                    id="avatar-upload"
+                    disabled={uploadingAvatar}
+                  />
+                  <label htmlFor="avatar-upload">
+                    <Button 
+                      type="button" 
+                      variant="outline" 
+                      size="sm" 
+                      className="cursor-pointer"
+                      disabled={uploadingAvatar}
+                      asChild
+                    >
+                      <span>
+                        {uploadingAvatar ? (
+                          <>
+                            <Upload className="h-4 w-4 mr-2 animate-spin" />
+                            Uploading...
+                          </>
+                        ) : (
+                          <>
+                            <Camera className="h-4 w-4 mr-2" />
+                            Upload Photo
+                          </>
+                        )}
+                      </span>
+                    </Button>
+                  </label>
+                  <p className="text-xs text-muted-foreground mt-1">JPG, PNG up to 5MB</p>
+                </div>
+              </div>
             </div>
           </CardContent>
         </Card>
