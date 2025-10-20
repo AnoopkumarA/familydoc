@@ -8,7 +8,7 @@ import { useToast } from '@/hooks/use-toast';
 
 export default function SiteNav() {
   const [open, setOpen] = useState(false);
-  const { signOut } = useAuth();
+  const { user, signOut } = useAuth();
   const { toast } = useToast();
 
   const handleSignOut = async () => {
@@ -72,25 +72,47 @@ export default function SiteNav() {
                   <Folder className="h-4 w-4" />
                   Open folders
                 </NavLink>
-                <NavLink
-                  to="/profile"
-                  onClick={() => setOpen(false)}
-                  className={({ isActive }) =>
-                    (isActive
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-muted/40 text-foreground hover:bg-muted') +
-                    ' w-56 text-center px-5 py-3 rounded-lg shadow-sm transition-colors flex items-center justify-center gap-2'
-                  }
-                >
-                  <User className="h-4 w-4" />
-                  Profile
-                </NavLink>
+                {user ? (
+                  <NavLink
+                    to="/profile"
+                    onClick={() => setOpen(false)}
+                    className={({ isActive }) =>
+                      (isActive
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-muted/40 text-foreground hover:bg-muted') +
+                      ' w-56 text-center px-5 py-3 rounded-lg shadow-sm transition-colors flex items-center justify-center gap-2'
+                    }
+                  >
+                    <User className="h-4 w-4" />
+                    Profile
+                  </NavLink>
+                ) : (
+                  <NavLink
+                    to="/auth"
+                    onClick={() => setOpen(false)}
+                    className={({ isActive }) =>
+                      (isActive
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-muted/40 text-foreground hover:bg-muted') +
+                      ' w-56 text-center px-5 py-3 rounded-lg shadow-sm transition-colors flex items-center justify-center gap-2'
+                    }
+                  >
+                    <User className="h-4 w-4" />
+                    Login
+                  </NavLink>
+                )}
               </nav>
               <div className="mt-auto pt-6">
-                <Button variant="outline" onClick={handleSignOut} className="w-full">
-                  <LogOut className="h-4 w-4 mr-2" />
-                  Sign Out
-                </Button>
+                {user ? (
+                  <Button variant="outline" onClick={handleSignOut} className="w-full">
+                    <LogOut className="h-4 w-4 mr-2" />
+                    Sign Out
+                  </Button>
+                ) : (
+                  <Button variant="outline" asChild className="w-full" onClick={() => setOpen(false)}>
+                    <Link to="/auth">Login</Link>
+                  </Button>
+                )}
               </div>
             </SheetContent>
           </Sheet>
@@ -113,10 +135,16 @@ export default function SiteNav() {
             <NavLink to="/uploads" className={({ isActive }) => isActive ? 'text-primary' : 'text-foreground hover:text-primary'}>
               Uploads
             </NavLink>
-            <NavLink to="/profile" className={({ isActive }) => isActive ? 'text-primary flex items-center gap-1' : 'text-foreground hover:text-primary flex items-center gap-1'}>
-              <User className="h-4 w-4" />
-              Profile
-            </NavLink>
+            {user ? (
+              <NavLink to="/profile" className={({ isActive }) => isActive ? 'text-primary flex items-center gap-1' : 'text-foreground hover:text-primary flex items-center gap-1'}>
+                <User className="h-4 w-4" />
+                Profile
+              </NavLink>
+            ) : (
+              <NavLink to="/auth" className={({ isActive }) => isActive ? 'text-primary' : 'text-foreground hover:text-primary'}>
+                Login
+              </NavLink>
+            )}
           </nav>
         </div>
       </div>
