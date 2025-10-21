@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
 import { useToast } from './use-toast';
-import { isMobileDevice, canShareFiles, canShareURL } from '@/lib/utils';
+import { isMobileDevice, canShareFiles, canShareURL, isAndroid, isWebView, debugShareCapabilities } from '@/lib/utils';
 
 export interface Document {
   id: string;
@@ -159,8 +159,12 @@ export function useDocuments() {
 
   const shareDocument = async (document: Document) => {
     try {
+      // Debug sharing capabilities
+      debugShareCapabilities();
+      
       // Detect if we're on a mobile device
       const isMobile = isMobileDevice();
+      const isAndroidDevice = isAndroid();
       
       // Try to download the file for native sharing
       const { data: blob, error: dlError } = await supabase.storage
@@ -204,7 +208,54 @@ export function useDocuments() {
           toast({ title: 'Link shared', description: 'Document link shared via native share.' });
           return;
         } catch (urlShareError) {
-          console.log('URL sharing failed, trying clipboard fallback:', urlShareError);
+          console.log('URL sharing failed, trying Android intent fallback:', urlShareError);
+        }
+      }
+
+      // For Android, try alternative sharing methods
+      if (isAndroidDevice && isMobile) {
+        try {
+          // Try using Android's intent system if available
+          const { data: linkData, error } = await supabase.storage
+            .from('documents')
+            .createSignedUrl(document.file_path, 60 * 60 * 24);
+          if (error) throw error;
+
+          // Check if we're in a WebView
+          if (isWebView()) {
+            // Method 1: Try Android Intent URL
+            try {
+              const intentUrl = `intent://share#Intent;action=android.intent.action.SEND;type=text/plain;S.android.intent.extra.TEXT=${encodeURIComponent(linkData.signedUrl)};end`;
+              window.location.href = intentUrl;
+              toast({ title: 'Opening share', description: 'Opening Android share panel...' });
+              return;
+            } catch (intentError) {
+              console.log('Intent URL failed:', intentError);
+            }
+
+            // Method 2: Try creating a temporary link element
+            try {
+              const tempLink = document.createElement('a');
+              tempLink.href = `mailto:?subject=${encodeURIComponent(document.name)}&body=${encodeURIComponent(linkData.signedUrl)}`;
+              tempLink.click();
+              toast({ title: 'Opening email', description: 'Opening email app to share document...' });
+              return;
+            } catch (emailError) {
+              console.log('Email sharing failed:', emailError);
+            }
+
+            // Method 3: Try WhatsApp Web API
+            try {
+              const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(`${document.name}: ${linkData.signedUrl}`)}`;
+              window.open(whatsappUrl, '_blank');
+              toast({ title: 'Opening WhatsApp', description: 'Opening WhatsApp to share document...' });
+              return;
+            } catch (whatsappError) {
+              console.log('WhatsApp sharing failed:', whatsappError);
+            }
+          }
+        } catch (androidError) {
+          console.log('Android sharing methods failed:', androidError);
         }
       }
 

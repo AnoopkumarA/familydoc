@@ -31,7 +31,7 @@ import {
   Pencil,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
-import { canShareURL } from '@/lib/utils';
+import { canShareURL, isAndroid, isMobileDevice } from '@/lib/utils';
 
 export default function Uploads() {
   const { user } = useAuth();
@@ -456,7 +456,13 @@ export default function Uploads() {
                           size="sm"
                           className="flex-1 sm:w-auto"
                           onClick={() => shareDocument(doc)}
-                          title={canShareURL() ? "Share via native share panel" : "Copy link to clipboard"}
+                          title={
+                            canShareURL() 
+                              ? "Share via native share panel" 
+                              : isAndroid() && isMobileDevice()
+                                ? "Will try to open share apps (Android Studio may fallback to clipboard)"
+                                : "Copy link to clipboard"
+                          }
                         >
                           <Share2 className="h-4 w-4 sm:mr-2" />
                           <span className="sm:inline">Share</span>
