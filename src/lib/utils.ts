@@ -52,6 +52,17 @@ export function debugShareCapabilities(): void {
     isWebView: isWebView(),
     isAndroidStudio: isAndroidStudio(),
     standalone: window.navigator.standalone,
-    displayMode: window.matchMedia('(display-mode: standalone)').matches
+    displayMode: window.matchMedia('(display-mode: standalone)').matches,
+    // Test Web Share API capabilities
+    canShareTest: () => {
+      if (typeof nav.share === 'function') {
+        try {
+          return nav.canShare({ title: 'Test', text: 'Test' });
+        } catch (e) {
+          return false;
+        }
+      }
+      return false;
+    }
   });
 }
