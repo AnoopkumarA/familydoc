@@ -166,7 +166,7 @@ export function useDocuments() {
       const isMobile = isMobileDevice();
       const isAndroidDevice = isAndroid();
       
-      // Get file info first to check size
+      // Download the file for sharing
       const { data: blob, error: dlError } = await supabase.storage
         .from('documents')
         .download(document.file_path);
@@ -183,33 +183,10 @@ export function useDocuments() {
         type: document.file_type
       });
 
-      // PRIORITY 1: Try simple URL sharing first (most reliable)
+      // PRIORITY 1: Try to share the actual file (not link)
       if (canShareURL()) {
-        try {
-          // Create signed URL for sharing
-          const { data: linkData, error } = await supabase.storage
-            .from('documents')
-            .createSignedUrl(document.file_path, 60 * 60 * 24); // 24 hours
-          if (error) throw error;
-          
-          // Try simple sharing first
-          const shareData = {
-            title: document.name,
-            text: `${document.description || 'Document from Family Document Vault'}\n\nFile: ${document.name} (${fileSizeMB.toFixed(1)}MB)`,
-            url: linkData.signedUrl
-          };
-          
-          console.log('Attempting to share:', shareData);
-          await nav.share(shareData);
-          toast({ title: 'Document shared', description: 'Document shared with download link!' });
-          return;
-        } catch (urlShareError) {
-          console.log('URL sharing failed:', urlShareError);
-          console.log('Error details:', urlShareError.message);
-        }
-
-        // PRIORITY 2: Try sharing file directly (for smaller files)
-        if (fileSizeMB < 5 && canShareFiles()) {
+        // First try: Share file directly (actual file content)
+        if (canShareFiles()) {
           try {
             const canShareFile = nav.canShare({ files: [file] });
             console.log('Can share file:', canShareFile);
@@ -228,74 +205,122 @@ export function useDocuments() {
             console.log('Error details:', shareError.message);
           }
         }
-      }
 
-      // PRIORITY 3: For Android, try alternative sharing methods
-      if (isAndroidDevice && isMobile) {
+        // Second try: Create a temporary download link and share that
         try {
-          const { data: linkData, error } = await supabase.storage
-            .from('documents')
-            .createSignedUrl(document.file_path, 60 * 60 * 24);
-          if (error) throw error;
-
-          // Method 1: Try Android Intent with URL
-          if (isWebView()) {
-            try {
-              const intentUrl = `intent://share#Intent;action=android.intent.action.SEND;type=text/plain;S.android.intent.extra.TEXT=${encodeURIComponent(`${document.name}\n\n${linkData.signedUrl}`)};end`;
-              window.location.href = intentUrl;
-              toast({ title: 'Opening share', description: 'Opening Android share panel...' });
-              return;
-            } catch (intentError) {
-              console.log('Intent URL failed:', intentError);
-            }
-          }
-
-          // Method 2: Try to open file directly
-          try {
-            window.open(linkData.signedUrl, '_blank');
-            toast({ title: 'Opening document', description: 'Opening document in default app...' });
-            return;
-          } catch (openError) {
-            console.log('Direct open failed:', openError);
-          }
-
-          // Method 3: Email sharing
-          try {
-            const tempLink = document.createElement('a');
-            tempLink.href = `mailto:?subject=${encodeURIComponent(document.name)}&body=${encodeURIComponent(`Document: ${document.name}\n\nDownload: ${linkData.signedUrl}\n\nDescription: ${document.description || 'Shared from Family Document Vault'}`)}`;
-            tempLink.click();
-            toast({ title: 'Opening email', description: 'Opening email app to share document...' });
-            return;
-          } catch (emailError) {
-            console.log('Email sharing failed:', emailError);
-          }
-        } catch (androidError) {
-          console.log('Android sharing methods failed:', androidError);
+          // Create a blob URL for the file
+          const blobUrl = URL.createObjectURL(blob);
+          
+          // Try sharing with blob URL
+          await nav.share({ 
+            title: document.name, 
+            text: document.description || 'Shared from Family Document Vault',
+            url: blobUrl
+          });
+          
+          // Clean up the blob URL after a delay
+          setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+          
+          toast({ title: 'Document shared', description: 'Document file shared successfully!' });
+          return;
+        } catch (blobShareError) {
+          console.log('Blob URL sharing failed:', blobShareError);
+          URL.revokeObjectURL(blobUrl);
         }
       }
 
-      // PRIORITY 4: Final fallback - Copy link to clipboard
-      const url = await getShareableLink(document);
-      
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        await navigator.clipboard.writeText(url);
-        toast({ 
-          title: 'Link copied', 
-          description: isMobile 
-            ? 'Link copied to clipboard. Paste in any app to share.' 
-            : 'Paste anywhere to share.' 
-        });
-      } else {
-        // Fallback for older browsers
-        const textArea = document.createElement('textarea');
-        textArea.value = url;
-        document.body.appendChild(textArea);
-        textArea.select();
-        document.execCommand('copy');
-        document.body.removeChild(textArea);
-        toast({ 
-          title: 'Link copied', 
-          description: 'Document link copied to clipboard.' 
+      // PRIORITY 2: For Android, try alternative file sharing methods
+      if (isAndroidDevice && isMobile) {
+        try {
+          // Method 1: Try to trigger file download and then share
+          try {
+            // Create a temporary download link
+            const blobUrl = URL.createObjectURL(blob);
+            
+            // Create a temporary anchor element to trigger download
+            const tempAnchor = document.createElement('a');
+            tempAnchor.href = blobUrl;
+            tempAnchor.download = document.name;
+            tempAnchor.style.display = 'none';
+            document.body.appendChild(tempAnchor);
+            tempAnchor.click();
+            document.body.removeChild(tempAnchor);
+            
+            // Try to open the downloaded file for sharing
+            setTimeout(() => {
+              window.open(blobUrl, '_blank');
+            }, 1000);
+            
+            toast({ title: 'Downloading document', description: 'Document downloaded, you can now share it from your downloads...' });
+            return;
+          } catch (downloadError) {
+            console.log('Download trigger failed:', downloadError);
+          }
+
+          // Method 2: Try Android Intent with file data
+          if (isWebView()) {
+            try {
+              // Convert file to base64 for Android Intent
+              const reader = new FileReader();
+              const base64Promise = new Promise<string>((resolve, reject) => {
+                reader.onload = () => {
+                  const result = reader.result as string;
+                  const base64 = result.split(',')[1];
+                  resolve(base64);
+                };
+                reader.onerror = reject;
+              });
+              reader.readAsDataURL(blob);
+              const base64Data = await base64Promise;
+
+              // Create data URL for Android Intent
+              const dataUrl = `data:${document.file_type};base64,${base64Data}`;
+              const intentUrl = `intent://share#Intent;action=android.intent.action.SEND;type=${document.file_type};S.android.intent.extra.STREAM=${encodeURIComponent(dataUrl)};S.android.intent.extra.TEXT=${encodeURIComponent(document.name)};end`;
+              
+              window.location.href = intentUrl;
+              toast({ title: 'Opening share', description: 'Opening Android share panel with document...' });
+              return;
+            } catch (intentError) {
+              console.log('Intent with file data failed:', intentError);
+            }
+          }
+        } catch (androidError) {
+          console.log('Android file sharing methods failed:', androidError);
+        }
+      }
+
+      // PRIORITY 3: Fallback - Create download link and copy to clipboard
+      try {
+        const { data: linkData, error } = await supabase.storage
+          .from('documents')
+          .createSignedUrl(document.file_path, 60 * 60 * 24);
+        if (error) throw error;
+
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(linkData.signedUrl);
+          toast({ 
+            title: 'Download link copied', 
+            description: 'Download link copied to clipboard. Paste in any app to share the document.' 
+          });
+        } else {
+          // Fallback for older browsers
+          const textArea = document.createElement('textarea');
+          textArea.value = linkData.signedUrl;
+          document.body.appendChild(textArea);
+          textArea.select();
+          document.execCommand('copy');
+          document.body.removeChild(textArea);
+          toast({ 
+            title: 'Download link copied', 
+            description: 'Download link copied to clipboard.' 
+          });
+        }
+      } catch (fallbackError) {
+        console.log('Fallback sharing failed:', fallbackError);
+        toast({
+          variant: 'destructive',
+          title: 'Share failed',
+          description: 'Unable to share document. Please try downloading manually.',
         });
       }
     } catch (error: any) {
