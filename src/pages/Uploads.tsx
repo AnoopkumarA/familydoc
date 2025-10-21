@@ -32,6 +32,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { canShareURL, isAndroid, isMobileDevice } from '@/lib/utils';
+import { Capacitor } from '@capacitor/core';
 
 export default function Uploads() {
   const { user } = useAuth();
@@ -457,11 +458,13 @@ export default function Uploads() {
                           className="flex-1 sm:w-auto"
                           onClick={() => shareDocument(doc)}
                           title={
-                            canShareURL() 
-                              ? "Share via native share panel" 
-                              : isAndroid() && isMobileDevice()
-                                ? "Will try to open share apps (Android Studio may fallback to clipboard)"
-                                : "Copy link to clipboard"
+                            Capacitor.isNativePlatform()
+                              ? "Share via native Android share panel"
+                              : canShareURL() 
+                                ? "Share via native share panel" 
+                                : isAndroid() && isMobileDevice()
+                                  ? "Will try to open share apps (Android Studio may fallback to clipboard)"
+                                  : "Copy link to clipboard"
                           }
                         >
                           <Share2 className="h-4 w-4 sm:mr-2" />
