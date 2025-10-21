@@ -229,48 +229,71 @@ export function useDocuments() {
         }
       }
 
+      // PRIORITY 1.5: Force download approach for file sharing
+      try {
+        // Create a blob URL for the file
+        const blobUrl = URL.createObjectURL(blob);
+        
+        // Create a temporary anchor element to trigger download
+        const tempAnchor = document.createElement('a');
+        tempAnchor.href = blobUrl;
+        tempAnchor.download = document.name;
+        tempAnchor.style.display = 'none';
+        document.body.appendChild(tempAnchor);
+        tempAnchor.click();
+        document.body.removeChild(tempAnchor);
+        
+        // Clean up the blob URL
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
+        
+        toast({ 
+          title: 'Document downloaded', 
+          description: 'Document downloaded to your device. You can now share it from your downloads folder or file manager.' 
+        });
+        return;
+      } catch (downloadError) {
+        console.log('Download approach failed:', downloadError);
+      }
+
       // PRIORITY 2: For Android, try alternative file sharing methods
       if (isAndroidDevice && isMobile) {
         try {
-          // Method 1: Simple download trigger (most reliable)
-          try {
-            // Create a temporary download link
-            const blobUrl = URL.createObjectURL(blob);
-            
-            // Create a temporary anchor element to trigger download
-            const tempAnchor = document.createElement('a');
-            tempAnchor.href = blobUrl;
-            tempAnchor.download = document.name;
-            tempAnchor.style.display = 'none';
-            document.body.appendChild(tempAnchor);
-            tempAnchor.click();
-            document.body.removeChild(tempAnchor);
-            
-            // Clean up the blob URL
-            setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
-            
-            toast({ title: 'Document downloaded', description: 'Document downloaded to your device. You can now share it from your downloads folder.' });
-            return;
-          } catch (downloadError) {
-            console.log('Download trigger failed:', downloadError);
-          }
-
-          // Method 2: Try Android Intent with URL (simpler approach)
+          // Method 1: Try Android Intent with file data
           if (isWebView()) {
             try {
-              const { data: linkData, error } = await supabase.storage
-                .from('documents')
-                .createSignedUrl(document.file_path, 60 * 60 * 24);
-              if (error) throw error;
+              // Convert file to base64 for Android Intent
+              const reader = new FileReader();
+              const base64Promise = new Promise<string>((resolve, reject) => {
+                reader.onload = () => {
+                  const result = reader.result as string;
+                  const base64 = result.split(',')[1];
+                  resolve(base64);
+                };
+                reader.onerror = reject;
+              });
+              reader.readAsDataURL(blob);
+              const base64Data = await base64Promise;
 
-              const intentUrl = `intent://share#Intent;action=android.intent.action.SEND;type=text/plain;S.android.intent.extra.TEXT=${encodeURIComponent(`${document.name}\n\nDownload: ${linkData.signedUrl}`)};end`;
+              // Create data URL for Android Intent
+              const dataUrl = `data:${document.file_type};base64,${base64Data}`;
+              const intentUrl = `intent://share#Intent;action=android.intent.action.SEND;type=${document.file_type};S.android.intent.extra.STREAM=${encodeURIComponent(dataUrl)};S.android.intent.extra.TEXT=${encodeURIComponent(document.name)};end`;
               
               window.location.href = intentUrl;
-              toast({ title: 'Opening share', description: 'Opening Android share panel...' });
+              toast({ title: 'Opening share', description: 'Opening Android share panel with document...' });
               return;
             } catch (intentError) {
-              console.log('Intent URL failed:', intentError);
+              console.log('Intent with file data failed:', intentError);
             }
+          }
+
+          // Method 2: Try to open file directly in browser
+          try {
+            const blobUrl = URL.createObjectURL(blob);
+            window.open(blobUrl, '_blank');
+            toast({ title: 'Opening document', description: 'Opening document in browser. You can now share it from there.' });
+            return;
+          } catch (openError) {
+            console.log('Direct open failed:', openError);
           }
         } catch (androidError) {
           console.log('Android file sharing methods failed:', androidError);
@@ -303,40 +326,12 @@ export function useDocuments() {
         console.log('Download fallback failed:', downloadError);
       }
 
-      // PRIORITY 4: Final fallback - Copy download link to clipboard
-      try {
-        const { data: linkData, error } = await supabase.storage
-          .from('documents')
-          .createSignedUrl(document.file_path, 60 * 60 * 24);
-        if (error) throw error;
-
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-          await navigator.clipboard.writeText(linkData.signedUrl);
-          toast({ 
-            title: 'Download link copied', 
-            description: 'Download link copied to clipboard. Paste in any app to share the document.' 
-          });
-        } else {
-          // Fallback for older browsers
-          const textArea = document.createElement('textarea');
-          textArea.value = linkData.signedUrl;
-          document.body.appendChild(textArea);
-          textArea.select();
-          document.execCommand('copy');
-          document.body.removeChild(textArea);
-          toast({ 
-            title: 'Download link copied', 
-            description: 'Download link copied to clipboard.' 
-          });
-        }
-      } catch (fallbackError) {
-        console.log('Final fallback failed:', fallbackError);
-        toast({
-          variant: 'destructive',
-          title: 'Share failed',
-          description: 'Unable to share document. Please try downloading manually.',
-        });
-      }
+      // PRIORITY 4: Final fallback - Show error message
+      toast({
+        variant: 'destructive',
+        title: 'Share failed',
+        description: 'Unable to share document. Please try downloading the file manually and then share it.',
+      });
     } catch (error: any) {
       console.error('Share error:', error);
       toast({
