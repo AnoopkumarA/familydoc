@@ -52,6 +52,14 @@ export function debugShareCapabilities(): void {
     isWebView: isWebView(),
     isAndroidStudio: isAndroidStudio(),
     standalone: window.navigator.standalone,
-    displayMode: window.matchMedia('(display-mode: standalone)').matches
+    displayMode: window.matchMedia('(display-mode: standalone)').matches,
+    // Test file sharing capabilities
+    testFileSharing: () => {
+      if (typeof nav.canShare === 'function') {
+        const testFile = new File(['test'], 'test.pdf', { type: 'application/pdf' });
+        return nav.canShare({ files: [testFile] });
+      }
+      return false;
+    }
   });
 }

@@ -176,18 +176,56 @@ export function useDocuments() {
       const file = new File([blob], document.name, { type: document.file_type });
       const nav: any = navigator as any;
 
+      console.log('File details:', {
+        name: file.name,
+        type: file.type,
+        size: file.size,
+        lastModified: file.lastModified
+      });
+
+      // Ensure proper MIME type for better sharing compatibility
+      let shareableFile = file;
+      if (!file.type || file.type === 'application/octet-stream') {
+        // Try to determine MIME type from file extension
+        const extension = file.name.split('.').pop()?.toLowerCase();
+        const mimeTypes: Record<string, string> = {
+          'pdf': 'application/pdf',
+          'jpg': 'image/jpeg',
+          'jpeg': 'image/jpeg',
+          'png': 'image/png',
+          'gif': 'image/gif',
+          'doc': 'application/msword',
+          'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          'txt': 'text/plain',
+          'zip': 'application/zip'
+        };
+        
+        if (extension && mimeTypes[extension]) {
+          shareableFile = new File([blob], file.name, { type: mimeTypes[extension] });
+          console.log('Updated MIME type:', shareableFile.type);
+        }
+      }
+
       // Enhanced mobile detection and native sharing
       if (canShareURL()) {
         // First try: Share file directly (best for mobile)
-        if (canShareFiles() && nav.canShare({ files: [file] })) {
+        if (canShareFiles()) {
           try {
-            await nav.share({ 
-              files: [file], 
-              title: document.name, 
-              text: document.description || 'Shared from Family Document Vault' 
-            });
-            toast({ title: 'File shared', description: 'Document shared successfully via native share.' });
-            return;
+            // Test if we can share this specific file
+            const canShareThisFile = nav.canShare({ files: [shareableFile] });
+            console.log('Can share this file:', canShareThisFile);
+            
+            if (canShareThisFile) {
+              await nav.share({ 
+                files: [shareableFile], 
+                title: document.name, 
+                text: document.description || 'Shared from Family Document Vault' 
+              });
+              toast({ title: 'File shared', description: 'Document file shared successfully via native share.' });
+              return;
+            } else {
+              console.log('Cannot share this file type, trying URL fallback');
+            }
           } catch (shareError) {
             console.log('Direct file sharing failed, trying URL fallback:', shareError);
           }
@@ -215,28 +253,51 @@ export function useDocuments() {
       // For Android, try alternative sharing methods
       if (isAndroidDevice && isMobile) {
         try {
-          // Try using Android's intent system if available
-          const { data: linkData, error } = await supabase.storage
-            .from('documents')
-            .createSignedUrl(document.file_path, 60 * 60 * 24);
-          if (error) throw error;
-
           // Check if we're in a WebView
           if (isWebView()) {
-            // Method 1: Try Android Intent URL
+            // Method 1: Try Android Intent URL with file data
             try {
-              const intentUrl = `intent://share#Intent;action=android.intent.action.SEND;type=text/plain;S.android.intent.extra.TEXT=${encodeURIComponent(linkData.signedUrl)};end`;
+              // Convert file to base64 for Android intent
+              const reader = new FileReader();
+              reader.onload = () => {
+                const base64 = reader.result as string;
+                const dataUrl = `data:${shareableFile.type};base64,${base64.split(',')[1]}`;
+                
+                // Try to share file via Android intent
+                const intentUrl = `intent://share#Intent;action=android.intent.action.SEND;type=${shareableFile.type};S.android.intent.extra.STREAM=${encodeURIComponent(dataUrl)};S.android.intent.extra.TEXT=${encodeURIComponent(document.name)};end`;
+                window.location.href = intentUrl;
+                toast({ title: 'Opening share', description: 'Opening Android share panel with file...' });
+              };
+              reader.readAsDataURL(shareableFile);
+              return;
+            } catch (intentError) {
+              console.log('File intent failed, trying URL intent:', intentError);
+            }
+
+            // Method 2: Try Android Intent URL with download link
+            try {
+              const { data: linkData, error } = await supabase.storage
+                .from('documents')
+                .createSignedUrl(document.file_path, 60 * 60 * 24);
+              if (error) throw error;
+
+              const intentUrl = `intent://share#Intent;action=android.intent.action.SEND;type=${shareableFile.type};S.android.intent.extra.TEXT=${encodeURIComponent(`${document.name}\n\nDownload: ${linkData.signedUrl}`)};end`;
               window.location.href = intentUrl;
               toast({ title: 'Opening share', description: 'Opening Android share panel...' });
               return;
-            } catch (intentError) {
-              console.log('Intent URL failed:', intentError);
+            } catch (urlIntentError) {
+              console.log('URL intent failed:', urlIntentError);
             }
 
-            // Method 2: Try creating a temporary link element
+            // Method 3: Try creating a temporary link element
             try {
+              const { data: linkData, error } = await supabase.storage
+                .from('documents')
+                .createSignedUrl(document.file_path, 60 * 60 * 24);
+              if (error) throw error;
+
               const tempLink = document.createElement('a');
-              tempLink.href = `mailto:?subject=${encodeURIComponent(document.name)}&body=${encodeURIComponent(linkData.signedUrl)}`;
+              tempLink.href = `mailto:?subject=${encodeURIComponent(document.name)}&body=${encodeURIComponent(`Document: ${document.name}\n\nDownload link: ${linkData.signedUrl}`)}`;
               tempLink.click();
               toast({ title: 'Opening email', description: 'Opening email app to share document...' });
               return;
@@ -244,9 +305,14 @@ export function useDocuments() {
               console.log('Email sharing failed:', emailError);
             }
 
-            // Method 3: Try WhatsApp Web API
+            // Method 4: Try WhatsApp Web API
             try {
-              const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(`${document.name}: ${linkData.signedUrl}`)}`;
+              const { data: linkData, error } = await supabase.storage
+                .from('documents')
+                .createSignedUrl(document.file_path, 60 * 60 * 24);
+              if (error) throw error;
+
+              const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(`${document.name}\n\nDownload: ${linkData.signedUrl}`)}`;
               window.open(whatsappUrl, '_blank');
               toast({ title: 'Opening WhatsApp', description: 'Opening WhatsApp to share document...' });
               return;
