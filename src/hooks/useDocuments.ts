@@ -175,7 +175,6 @@ export function useDocuments() {
 
       const file = new File([blob], document.name, { type: document.file_type });
       const fileSizeMB = file.size / (1024 * 1024);
-      const nav: any = navigator as any;
 
       console.log('File info:', {
         name: document.name,
@@ -183,53 +182,7 @@ export function useDocuments() {
         type: document.file_type
       });
 
-      // PRIORITY 1: Try to share the actual file (not link)
-      if (canShareURL()) {
-        // First try: Share file directly (for smaller files only)
-        if (canShareFiles() && fileSizeMB < 10) {
-          try {
-            const canShareFile = nav.canShare({ files: [file] });
-            console.log('Can share file:', canShareFile, 'File size:', fileSizeMB + 'MB');
-            
-            if (canShareFile) {
-              await nav.share({ 
-                files: [file], 
-                title: document.name, 
-                text: document.description || 'Shared from Family Document Vault' 
-              });
-              toast({ title: 'Document shared', description: 'Document file shared successfully!' });
-              return;
-            }
-          } catch (shareError) {
-            console.log('File sharing failed:', shareError);
-            console.log('Error details:', shareError.message);
-          }
-        }
-
-        // Second try: Create a temporary download link and share that
-        try {
-          // Create a blob URL for the file
-          const blobUrl = URL.createObjectURL(blob);
-          
-          // Try sharing with blob URL
-          await nav.share({ 
-            title: document.name, 
-            text: document.description || 'Shared from Family Document Vault',
-            url: blobUrl
-          });
-          
-          // Clean up the blob URL after a delay
-          setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
-          
-          toast({ title: 'Document shared', description: 'Document file shared successfully!' });
-          return;
-        } catch (blobShareError) {
-          console.log('Blob URL sharing failed:', blobShareError);
-          URL.revokeObjectURL(blobUrl);
-        }
-      }
-
-      // PRIORITY 1.5: Force download approach for file sharing
+      // SIMPLIFIED APPROACH: Always download first, then try sharing
       try {
         // Create a blob URL for the file
         const blobUrl = URL.createObjectURL(blob);
@@ -252,81 +205,31 @@ export function useDocuments() {
         });
         return;
       } catch (downloadError) {
-        console.log('Download approach failed:', downloadError);
+        console.log('Download failed:', downloadError);
       }
 
-      // PRIORITY 2: For Android, try alternative file sharing methods
-      if (isAndroidDevice && isMobile) {
+      // FALLBACK: Try Web Share API with file (for small files only)
+      if (canShareURL() && canShareFiles() && fileSizeMB < 5) {
         try {
-          // Method 1: Try Android Intent with file data
-          if (isWebView()) {
-            try {
-              // Convert file to base64 for Android Intent
-              const reader = new FileReader();
-              const base64Promise = new Promise<string>((resolve, reject) => {
-                reader.onload = () => {
-                  const result = reader.result as string;
-                  const base64 = result.split(',')[1];
-                  resolve(base64);
-                };
-                reader.onerror = reject;
-              });
-              reader.readAsDataURL(blob);
-              const base64Data = await base64Promise;
-
-              // Create data URL for Android Intent
-              const dataUrl = `data:${document.file_type};base64,${base64Data}`;
-              const intentUrl = `intent://share#Intent;action=android.intent.action.SEND;type=${document.file_type};S.android.intent.extra.STREAM=${encodeURIComponent(dataUrl)};S.android.intent.extra.TEXT=${encodeURIComponent(document.name)};end`;
-              
-              window.location.href = intentUrl;
-              toast({ title: 'Opening share', description: 'Opening Android share panel with document...' });
-              return;
-            } catch (intentError) {
-              console.log('Intent with file data failed:', intentError);
-            }
-          }
-
-          // Method 2: Try to open file directly in browser
-          try {
-            const blobUrl = URL.createObjectURL(blob);
-            window.open(blobUrl, '_blank');
-            toast({ title: 'Opening document', description: 'Opening document in browser. You can now share it from there.' });
+          const nav: any = navigator as any;
+          const canShareFile = nav.canShare({ files: [file] });
+          console.log('Can share file:', canShareFile, 'File size:', fileSizeMB + 'MB');
+          
+          if (canShareFile) {
+            await nav.share({ 
+              files: [file], 
+              title: document.name, 
+              text: document.description || 'Shared from Family Document Vault' 
+            });
+            toast({ title: 'Document shared', description: 'Document file shared successfully!' });
             return;
-          } catch (openError) {
-            console.log('Direct open failed:', openError);
           }
-        } catch (androidError) {
-          console.log('Android file sharing methods failed:', androidError);
+        } catch (shareError) {
+          console.log('File sharing failed:', shareError);
         }
       }
 
-      // PRIORITY 3: Fallback - Try simple download approach
-      try {
-        // Create a simple download link
-        const blobUrl = URL.createObjectURL(blob);
-        
-        // Create a temporary anchor element to trigger download
-        const tempAnchor = document.createElement('a');
-        tempAnchor.href = blobUrl;
-        tempAnchor.download = document.name;
-        tempAnchor.style.display = 'none';
-        document.body.appendChild(tempAnchor);
-        tempAnchor.click();
-        document.body.removeChild(tempAnchor);
-        
-        // Clean up the blob URL
-        setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
-        
-        toast({ 
-          title: 'Document downloaded', 
-          description: 'Document downloaded to your device. You can now share it from your downloads folder or file manager.' 
-        });
-        return;
-      } catch (downloadError) {
-        console.log('Download fallback failed:', downloadError);
-      }
-
-      // PRIORITY 4: Final fallback - Show error message
+      // FINAL FALLBACK: Show error message
       toast({
         variant: 'destructive',
         title: 'Share failed',
