@@ -42,7 +42,7 @@ export default function Dashboard() {
   const uniqueCategories = new Set(documents.map(doc => doc.category)).size;
   const uniqueFamilyMembers = new Set(documents.map(doc => doc.family_member)).size;
   const totalStorage = documents.reduce((total, doc) => total + doc.file_size, 0);
-  const storageLimit = 1024 * 1024 * 1024; // 1 GB example limit
+  const storageLimit = 1024 * 1024 * 1024 * 2; // 2 GB example limit
   const storagePercent = Math.min(100, Math.round((totalStorage / storageLimit) * 100));
 
   const formatFileSize = (bytes: number) => {
@@ -102,7 +102,7 @@ export default function Dashboard() {
               <div className="text-2xl font-bold text-foreground">{formatFileSize(totalStorage)}</div>
               <div className="mt-2">
                 <Progress value={storagePercent} />
-                <div className="mt-1 text-xs text-muted-foreground">{storagePercent}% of 1 GB</div>
+                <div className="mt-1 text-xs text-muted-foreground">{storagePercent}% of 2 GB</div>
               </div>
             </CardHeader>
           </Card>
