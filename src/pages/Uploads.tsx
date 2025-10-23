@@ -44,7 +44,7 @@ export default function Uploads() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const categories = ['All', 'Identity', 'Certificates', 'Bills', 'Insurance', 'Medical', 'Legal', 'Financial'];
+  const categories = ['All', 'Identity', 'Certificates', 'Bank Details', 'Other'];
   const defaultMembers = ['Father', 'Mother', 'Child', 'Self', 'Spouse', 'Other'];
   const [customMembers, setCustomMembers] = useState<string[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -138,6 +138,31 @@ export default function Uploads() {
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString();
+  };
+
+  const handlePreview = async (document: any) => {
+    try {
+      const { data, error } = await supabase.storage
+        .from('documents')
+        .download(document.file_path);
+
+      if (error) throw error;
+
+      // Create a blob URL and open it in a new tab
+      const url = URL.createObjectURL(data);
+      window.open(url, '_blank');
+
+      // Clean up the blob URL after a delay to allow the browser to load it
+      setTimeout(() => {
+        URL.revokeObjectURL(url);
+      }, 1000);
+    } catch (error: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Preview failed',
+        description: error.message,
+      });
+    }
   };
 
   return (
@@ -425,32 +450,31 @@ export default function Uploads() {
               </div>
             ) : (
               filteredDocuments.map((doc) => (
-                <Card key={doc.id} className="hover:shadow-md transition-shadow">
-                  <CardContent className="p-4 sm:p-6">
+                <Card key={doc.id} className="hover:shadow-lg transition-all cursor-pointer" onClick={() => handlePreview(doc)}>
+                  <CardContent className="p-5 sm:p-7">
                     {/* Mobile: Stack vertically, Desktop: Horizontal */}
                     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                      <div className="flex items-start gap-3 sm:gap-4">
-                        <div className="bg-primary/10 p-2 sm:p-3 rounded-lg flex-shrink-0">
-                          <FileText className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
+                      <div className="flex items-start gap-4 sm:gap-5 flex-1">
+                        <div className="bg-primary/10 p-3 sm:p-4 rounded-lg flex-shrink-0">
+                          <FileText className="h-7 w-7 sm:h-8 sm:w-8 text-primary" />
                         </div>
 
                         <div className="min-w-0 flex-1">
-                          <h3 className="font-medium text-foreground text-sm sm:text-base break-words">{doc.name}</h3>
-                          <div className="flex flex-wrap items-center gap-1 sm:gap-2 mt-1">
+                          <h3 className="font-semibold text-foreground text-base sm:text-lg break-words">{doc.name}</h3>
+                          <div className="flex flex-wrap items-center gap-1 sm:gap-2 mt-2">
                             <Badge variant="outline" className="text-xs">{doc.category}</Badge>
-                            <Badge variant="secondary" className="text-xs">{doc.family_member}</Badge>
                           </div>
-                          <p className="text-xs sm:text-sm text-muted-foreground mt-1">
+                          <p className="text-xs sm:text-sm text-muted-foreground mt-2">
                             Uploaded on {new Date(doc.created_at).toLocaleDateString()} • {formatFileSize(doc.file_size)} • {doc.file_type.split('/')[1]?.toUpperCase() || 'FILE'}
                           </p>
                           {doc.description && (
-                            <p className="text-xs text-muted-foreground mt-1 break-words">{doc.description}</p>
+                            <p className="text-xs sm:text-sm text-muted-foreground mt-2 break-words">{doc.description}</p>
                           )}
                         </div>
                       </div>
 
                       {/* Action buttons - single row */}
-                      <div className="flex gap-2">
+                      <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
                         <Button 
                           variant="outline" 
                           size="sm"

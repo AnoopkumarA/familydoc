@@ -22,7 +22,7 @@ export function DocumentUpload({ onSuccess, fixedFamilyMember }: DocumentUploadP
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { uploadDocument } = useDocuments();
 
-  const categories = ['Identity', 'Certificates', 'Bills', 'Insurance', 'Medical', 'Legal', 'Financial'];
+  const categories = ['Identity', 'Certificates', 'Bank Details', 'Other'];
   const familyMembers = ['Father', 'Mother', 'Child', 'Spouse', 'Self', 'Other'];
 
   const handleFileSelect = (selectedFile: File) => {
