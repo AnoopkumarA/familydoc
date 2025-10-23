@@ -467,9 +467,6 @@ export default function Uploads() {
                           <p className="text-xs sm:text-sm text-muted-foreground mt-2">
                             Uploaded on {new Date(doc.created_at).toLocaleDateString()} • {formatFileSize(doc.file_size)} • {doc.file_type.split('/')[1]?.toUpperCase() || 'FILE'}
                           </p>
-                          {doc.description && (
-                            <p className="text-xs sm:text-sm text-muted-foreground mt-2 break-words">{doc.description}</p>
-                          )}
                         </div>
                       </div>
 

@@ -49,7 +49,7 @@ export function useDocuments() {
     file: File,
     category: string,
     familyMember: string,
-    description?: string
+    documentName: string
   ) => {
     if (!user) throw new Error('User not authenticated');
 
@@ -63,18 +63,18 @@ export function useDocuments() {
 
       if (uploadError) throw uploadError;
 
-      // Save document metadata to database
+      // Save document metadata to database with custom document name
       const { data, error: dbError } = await supabase
         .from('documents')
         .insert({
           user_id: user.id,
-          name: file.name,
+          name: documentName,
           file_path: fileName,
           file_size: file.size,
           file_type: file.type,
           category,
           family_member: familyMember,
-          description,
+          description: null,
         })
         .select()
         .single();
@@ -85,7 +85,7 @@ export function useDocuments() {
       
       toast({
         title: 'Document uploaded successfully',
-        description: `${file.name} has been uploaded.`,
+        description: `${documentName} has been uploaded.`,
       });
 
       return data;

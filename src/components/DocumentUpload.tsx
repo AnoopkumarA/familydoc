@@ -4,7 +4,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
 import { Upload, X } from 'lucide-react';
 import { useDocuments } from '@/hooks/useDocuments';
 
@@ -16,14 +15,12 @@ interface DocumentUploadProps {
 export function DocumentUpload({ onSuccess, fixedFamilyMember }: DocumentUploadProps) {
   const [file, setFile] = useState<File | null>(null);
   const [category, setCategory] = useState('');
-  const [familyMember, setFamilyMember] = useState(fixedFamilyMember ?? '');
-  const [description, setDescription] = useState('');
+  const [documentName, setDocumentName] = useState('');
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { uploadDocument } = useDocuments();
 
   const categories = ['Identity', 'Certificates', 'Bank Details', 'Other'];
-  const familyMembers = ['Father', 'Mother', 'Child', 'Spouse', 'Self', 'Other'];
 
   const handleFileSelect = (selectedFile: File) => {
     const maxSize = 10 * 1024 * 1024; // 10MB
@@ -39,6 +36,11 @@ export function DocumentUpload({ onSuccess, fixedFamilyMember }: DocumentUploadP
     }
 
     setFile(selectedFile);
+    // Auto-populate document name from filename if not already set
+    if (!documentName) {
+      const nameWithoutExtension = selectedFile.name.replace(/\.[^/.]+$/, '');
+      setDocumentName(nameWithoutExtension);
+    }
   };
 
   const handleDrop = (e: React.DragEvent) => {
@@ -50,20 +52,21 @@ export function DocumentUpload({ onSuccess, fixedFamilyMember }: DocumentUploadP
   };
 
   const handleUpload = async () => {
-    if (!file || !category || !familyMember) {
+    if (!file || !category || !documentName.trim()) {
       alert('Please fill all required fields');
       return;
     }
 
     setUploading(true);
     try {
-      await uploadDocument(file, category, familyMember, description);
+      // Use fixedFamilyMember if provided, otherwise use a default value
+      const familyMember = fixedFamilyMember || 'Documents';
+      await uploadDocument(file, category, familyMember, documentName);
       
       // Reset form
       setFile(null);
       setCategory('');
-      setFamilyMember('');
-      setDescription('');
+      setDocumentName('');
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
@@ -137,7 +140,17 @@ export function DocumentUpload({ onSuccess, fixedFamilyMember }: DocumentUploadP
         />
 
         {/* Form Fields */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="documentName">Document Name *</Label>
+            <Input
+              id="documentName"
+              placeholder="Enter document name"
+              value={documentName}
+              onChange={(e) => setDocumentName(e.target.value)}
+            />
+          </div>
+
           <div className="space-y-2">
             <Label htmlFor="category">Category *</Label>
             <Select value={category} onValueChange={setCategory}>
@@ -153,45 +166,11 @@ export function DocumentUpload({ onSuccess, fixedFamilyMember }: DocumentUploadP
               </SelectContent>
             </Select>
           </div>
-
-          {fixedFamilyMember ? (
-            <div className="space-y-2">
-              <Label htmlFor="familyMember">Family Member *</Label>
-              <Input value={fixedFamilyMember} disabled readOnly />
-            </div>
-          ) : (
-            <div className="space-y-2">
-              <Label htmlFor="familyMember">Family Member *</Label>
-              <Select value={familyMember} onValueChange={setFamilyMember}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select family member" />
-                </SelectTrigger>
-                <SelectContent>
-                  {familyMembers.map((member) => (
-                    <SelectItem key={member} value={member}>
-                      {member}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="description">Description (Optional)</Label>
-          <Textarea
-            id="description"
-            placeholder="Add a description or notes about this document..."
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            rows={3}
-          />
         </div>
 
         <Button 
           onClick={handleUpload} 
-          disabled={!file || !category || !familyMember || uploading}
+          disabled={!file || !category || !documentName.trim() || uploading}
           className="w-full"
         >
           {uploading ? 'Uploading...' : 'Upload Document'}
